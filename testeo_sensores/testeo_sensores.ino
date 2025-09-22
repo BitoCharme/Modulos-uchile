@@ -1,8 +1,7 @@
 /*
  * Testeo de 6 Sensores IR - Seguidor de Línea
- * Universidad de Chile
  * 
- * Funcionalidades:
+ * ¿Que hace?:
  * - Muestra valores individuales de 6 sensores IR.
  * - Detecta línea blanca sobre fondo negro.
  * - Muestra la posición relativa de la línea.
@@ -16,7 +15,7 @@ const int sensores[numSensores] = {A0, A1, A2, A3, A4, A5};
 int valores[numSensores];
 
 // Umbral para detección de línea blanca
-const int umbral = 700; // no seguro del valor del umbral
+const int umbral = 700; //Aca se puede ajustar el umbral al valor que se quiera
 
 void setup() {
   Serial.begin(9600);
@@ -61,7 +60,7 @@ String determinarPosicion(int vals[]) {
   int suma = 0;
   int totalPeso = 0;
 
-  // Asignar pesos de posición (-5 a +5) para 6 sensores
+  // Asignar pesos de posición (-5 a +5) para los 6 sensores
   // Ejemplo:   S0   S1   S2   S3   S4   S5
   // Pesos:    -5   -3   -1   +1   +3   +5
   int pesos[numSensores] = {-5, -3, -1, 1, 3, 5};
