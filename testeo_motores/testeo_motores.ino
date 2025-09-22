@@ -1,76 +1,46 @@
 /*
- * Testeo de Motores - Universidad de Chile
+ * Testeo de Motores - Seguidor de Línea
+ * Este código prueba el funcionamiento de los motores DC en un robot seguidor de línea.
  * 
- * Este código permite probar diferentes tipos de motores:
- * - Motores DC
- * - Servomotores  
- * - Motores paso a paso
- * 
- * Funciones incluidas:
- * - Control de velocidad
- * - Control de dirección
- * - Pruebas de funcionamiento
+ * Funciones:
+ * - Control de velocidad y dirección de los motores DC (para las ruedas del robot).
+ * - Habilidad de detener los motores.
  */
 
-// Pines para motores DC
 const int motorDC_pin1 = 9;  // Pin PWM para control de velocidad
 const int motorDC_pin2 = 8;  // Pin de dirección
 const int motorDC_enable = 7; // Pin enable
 
-// Pines para servomotor
-const int servo_pin = 6;
-
-// Pines para motor paso a paso (usando driver A4988)
-const int stepper_step = 5;
-const int stepper_dir = 4;
-const int stepper_enable = 3;
-
 // Variables globales
-int velocidad_motor = 0;
-bool direccion = true; // true = adelante, false = atrás
-int posicion_servo = 90; // Posición inicial del servo (90 grados)
+int velocidad_motor = 255;  // Velocidad máxima del motor (0-255)
+bool direccion = true;      // true = adelante, false = atrás
 
 void setup() {
-  // Inicializar comunicación serial
   Serial.begin(9600);
   Serial.println("=== TESTEO DE MOTORES ===");
-  Serial.println("Universidad de Chile");
-  Serial.println("------------------------");
-  
-  // Configurar pines como salidas
+
   pinMode(motorDC_pin1, OUTPUT);
   pinMode(motorDC_pin2, OUTPUT);
   pinMode(motorDC_enable, OUTPUT);
-  
-  pinMode(servo_pin, OUTPUT);
-  
-  pinMode(stepper_step, OUTPUT);
-  pinMode(stepper_dir, OUTPUT);
-  pinMode(stepper_enable, OUTPUT);
-  
-  // Estado inicial
-  digitalWrite(motorDC_enable, HIGH); // Habilitar motor DC
-  digitalWrite(stepper_enable, LOW);  // Habilitar motor paso a paso
-  
+
+  // Estado inicial: Habilitar motor
+  digitalWrite(motorDC_enable, HIGH);
   mostrarMenu();
 }
 
 void loop() {
   if (Serial.available() > 0) {
     char opcion = Serial.read();
-    
+
     switch (opcion) {
       case '1':
-        testear_motor_DC();
+        moverAdelante();
         break;
       case '2':
-        testear_servomotor();
+        moverAtras();
         break;
       case '3':
-        testear_motor_paso_a_paso();
-        break;
-      case '4':
-        parar_todos_motores();
+        detenerMotores();
         break;
       case 'm':
       case 'M':
@@ -81,130 +51,117 @@ void loop() {
         break;
     }
   }
-  
+
   delay(100);
 }
 
 void mostrarMenu() {
   Serial.println("\n=== MENÚ DE TESTEO ===");
-  Serial.println("1. Testear Motor DC");
-  Serial.println("2. Testear Servomotor");
-  Serial.println("3. Testear Motor Paso a Paso");
-  Serial.println("4. Parar Todos los Motores");
+  Serial.println("1. Mover adelante");
+  Serial.println("2. Mover atrás");
+  Serial.println("3. Detener motores");
   Serial.println("M. Mostrar Menú");
   Serial.println("Selecciona una opción:");
 }
 
-void testear_motor_DC() {
-  Serial.println("\n--- TESTEO MOTOR DC ---");
-  
-  // Prueba hacia adelante
-  Serial.println("Moviendo hacia adelante...");
+void moverAdelante() {
+  Serial.println("\nMoviendo adelante...");
   digitalWrite(motorDC_pin2, HIGH);
-  for (int vel = 0; vel <= 255; vel += 51) {
-    analogWrite(motorDC_pin1, vel);
-    Serial.print("Velocidad: ");
-    Serial.print((vel * 100) / 255);
-    Serial.println("%");
-    delay(1000);
-  }
-  
-  // Parar
-  analogWrite(motorDC_pin1, 0);
-  delay(1000);
-  
-  // Prueba hacia atrás
-  Serial.println("Moviendo hacia atrás...");
+  analogWrite(motorDC_pin1, velocidad_motor);
+}
+
+void moverAtras() {
+  Serial.println("\nMoviendo atrás...");
   digitalWrite(motorDC_pin2, LOW);
-  for (int vel = 0; vel <= 255; vel += 51) {
-    analogWrite(motorDC_pin1, vel);
-    Serial.print("Velocidad: ");
-    Serial.print((vel * 100) / 255);
-    Serial.println("%");
-    delay(1000);
-  }
-  
-  // Parar motor
-  analogWrite(motorDC_pin1, 0);
-  Serial.println("Motor DC detenido.");
+  analogWrite(motorDC_pin1, velocidad_motor);
 }
 
-void testear_servomotor() {
-  Serial.println("\n--- TESTEO SERVOMOTOR ---");
-  
-  // Mover servo de 0 a 180 grados
-  Serial.println("Moviendo servo de 0° a 180°...");
-  for (int pos = 0; pos <= 180; pos += 30) {
-    controlar_servo(pos);
-    Serial.print("Posición: ");
-    Serial.print(pos);
-    Serial.println("°");
-    delay(1000);
-  }
-  
-  // Volver a posición central
-  controlar_servo(90);
-  Serial.println("Servo en posición central (90°)");
-}
-
-void testear_motor_paso_a_paso() {
-  Serial.println("\n--- TESTEO MOTOR PASO A PASO ---");
-  
-  // Mover en sentido horario
-  Serial.println("Moviendo en sentido horario (200 pasos)...");
-  digitalWrite(stepper_dir, HIGH);
-  for (int i = 0; i < 200; i++) {
-    digitalWrite(stepper_step, HIGH);
-    delayMicroseconds(2000);
-    digitalWrite(stepper_step, LOW);
-    delayMicroseconds(2000);
-  }
-  
-  delay(1000);
-  
-  // Mover en sentido antihorario
-  Serial.println("Moviendo en sentido antihorario (200 pasos)...");
-  digitalWrite(stepper_dir, LOW);
-  for (int i = 0; i < 200; i++) {
-    digitalWrite(stepper_step, HIGH);
-    delayMicroseconds(2000);
-    digitalWrite(stepper_step, LOW);
-    delayMicroseconds(2000);
-  }
-  
-  Serial.println("Motor paso a paso detenido.");
-}
-
-void controlar_servo(int angulo) {
-  // Control PWM manual para servomotor (1-2ms pulse width)
-  int pulseWidth = map(angulo, 0, 180, 1000, 2000);
-  
-  for (int i = 0; i < 20; i++) { // Enviar señal durante 20ms
-    digitalWrite(servo_pin, HIGH);
-    delayMicroseconds(pulseWidth);
-    digitalWrite(servo_pin, LOW);
-    delayMicroseconds(20000 - pulseWidth);
-  }
-}
-
-void parar_todos_motores() {
-  Serial.println("\n--- PARANDO TODOS LOS MOTORES ---");
-  
-  // Parar motor DC
+void detenerMotores() {
+  Serial.println("\nDeteniendo motores...");
   analogWrite(motorDC_pin1, 0);
   digitalWrite(motorDC_enable, LOW);
-  
-  // Parar servo (posición neutral)
-  controlar_servo(90);
-  
-  // Parar motor paso a paso
-  digitalWrite(stepper_enable, HIGH); // Deshabilitar motor
-  
-  Serial.println("Todos los motores han sido detenidos.");
-  
-  // Reactivar después de 2 segundos
-  delay(2000);
+  delay(1000); // Pausa de 1 segundo
   digitalWrite(motorDC_enable, HIGH);
-  digitalWrite(stepper_enable, LOW);
-  Serial.println("Motores reactivados y listos para uso.");
+  Serial.println("Motores reactivados.");
 }
+
+/*
+ * Testeo de Sensores - Seguidor de Línea
+ * Este código prueba el funcionamiento de los sensores de línea (IR) para detectar la línea.
+ * 
+ * Funciones:
+ * - Leer valores de los sensores IR.
+ * - Mostrar los valores en el monitor serial y decidir el comportamiento del robot.
+ */
+
+const int sensorIzquierdo = A0;  // Pin para sensor izquierdo
+const int sensorDerecho = A1;    // Pin para sensor derecho
+
+int valorIzquierdo = 0;
+int valorDerecho = 0;
+
+void setup() {
+  Serial.begin(9600);
+  Serial.println("=== TESTEO DE SENSORES IR ===");
+
+  pinMode(sensorIzquierdo, INPUT);
+  pinMode(sensorDerecho, INPUT);
+
+  mostrarMenu();
+}
+
+void loop() {
+  if (Serial.available() > 0) {
+    char opcion = Serial.read();
+
+    switch (opcion) {
+      case '1':
+        testearSensores();
+        break;
+      case 'm':
+      case 'M':
+        mostrarMenu();
+        break;
+      default:
+        Serial.println("Opción no válida. Presiona 'M' para ver el menú.");
+        break;
+    }
+  }
+
+  delay(100);
+}
+
+void mostrarMenu() {
+  Serial.println("\n=== MENÚ DE TESTEO DE SENSORES ===");
+  Serial.println("1. Testear Sensores");
+  Serial.println("M. Mostrar Menú");
+  Serial.println("Selecciona una opción:");
+}
+
+void testearSensores() {
+  valorIzquierdo = analogRead(sensorIzquierdo);
+  valorDerecho = analogRead(sensorDerecho);
+
+  Serial.print("Izquierdo: ");
+  Serial.print(valorIzquierdo);
+  Serial.print("  Derecho: ");
+  Serial.println(valorDerecho);
+
+  // Definir un umbral para la detección de línea (esto dependerá de tu sensor)
+  int umbral = 500; // Ajusta este valor según tu sensor
+
+  // Detectar si el sensor izquierdo está sobre la línea (valor bajo indica línea detectada)
+  if (valorIzquierdo < umbral) {
+    Serial.println("Sensor izquierdo detecta la línea.");
+  } else {
+    Serial.println("Sensor izquierdo no detecta la línea.");
+  }
+
+  // Detectar si el sensor derecho está sobre la línea
+  if (valorDerecho < umbral) {
+    Serial.println("Sensor derecho detecta la línea.");
+  } else {
+    Serial.println("Sensor derecho no detecta la línea.");
+  }
+}
+
