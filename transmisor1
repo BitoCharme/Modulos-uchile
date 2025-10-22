@@ -1,0 +1,64 @@
+#include <esp_now.h>
+#include <WiFi.h>
+#include "esp_wifi.h"
+
+uint8_t broadcastAddress[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+
+typedef struct struct_mensaje {
+  int id;
+  int valorPotenciometro;  // ahora se envía la lectura del potenciómetro
+} struct_mensaje;
+
+struct_mensaje miDato;
+
+void onDataSent(const wifi_tx_info_t* info, esp_now_send_status_t status) {
+  Serial.print("Estado del último paquete: ");
+  Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Éxito" : "Fallo");
+}
+
+void setup() {
+  Serial.begin(115200);
+
+  // Inicializar WiFi en modo estación
+  WiFi.mode(WIFI_STA);
+  esp_wifi_set_channel(1, WIFI_SECOND_CHAN_NONE);
+
+  // Inicializar ESP-NOW
+  if (esp_now_init() != ESP_OK) {
+    Serial.println("Error al inicializar ESP-NOW");
+    return;
+  }
+
+  // Registrar callback de envío
+  esp_now_register_send_cb(onDataSent);
+
+  // Agregar peer (broadcast)
+  esp_now_peer_info_t peerInfo = {};
+  memcpy(peerInfo.peer_addr, broadcastAddress, 6);
+  peerInfo.channel = 1;
+  peerInfo.encrypt = false;
+
+  if (esp_now_add_peer(&peerInfo) != ESP_OK) {
+    Serial.println("Error al agregar peer");
+    return;
+  }
+
+  // Inicializar datos
+  miDato.id = 1;
+}
+
+int ultimoValor = -1;
+
+void loop() {
+  int lectura = analogRead(0);  // 2 el pin que uses
+
+  if (abs(lectura - ultimoValor) >= 10) {  // Cambió al menos 10 unidades
+    miDato.valorPotenciometro = lectura;
+    esp_now_send(broadcastAddress, (uint8_t *)&miDato, sizeof(miDato));
+    Serial.print("Enviado: ");
+    Serial.println(lectura);
+    ultimoValor = lectura;
+  }
+
+  delay(1);  // Baja carga de CPU y evita spam
+}
