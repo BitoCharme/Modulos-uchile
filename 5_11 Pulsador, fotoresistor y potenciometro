@@ -1,0 +1,90 @@
+// --- Pines ---
+const int pinPulsador = 2;  // GPIO2 -> Pulsador
+const int pinLDR       = 0; // GPIO0 -> Fotorresistencia
+const int pinPote      = 1; // GPIO1 -> Potenciómetro
+
+// --- Variables pulsador ---
+bool estadoActual = HIGH;
+bool estadoAnterior = HIGH;
+unsigned long tiempoUltimoCambio = 0;
+unsigned long tiempoUltimaPulsacion = 0;
+int conteoPulsos = 0;
+bool esperandoSecuencia = false;
+
+// --- Configuración de tiempos ---
+const unsigned long debounceDelay = 5;     // ms para evitar rebote
+const unsigned long ventanaSecuencia = 1000; // ms máximo entre pulsos para agrupar secuencia
+
+// --- Sensores ---
+int valorLuz = 0;
+int valorPote = 0;
+
+// --- Lectura con promedio ---
+int leerPromedio(int pin) {
+  long suma = 0;
+  const int n = 10;
+  for (int i = 0; i < n; i++) {
+    suma += analogRead(pin);
+    delay(2);
+  }
+  return suma / n;
+}
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(pinPulsador, INPUT_PULLUP);
+  Serial.println("Listo. Prueba pulsaciones rápidas o largas: siempre contará 1 por presión.");
+}
+
+void loop() {
+  unsigned long ahora = millis();
+  bool lectura = digitalRead(pinPulsador);
+
+  // --- Antirrebote ---
+  if (lectura != estadoAnterior) {
+    tiempoUltimoCambio = ahora;
+  }
+
+  // Si el estado es estable por más del tiempo de rebote
+  if ((ahora - tiempoUltimoCambio) > debounceDelay) {
+    if (lectura != estadoActual) {
+      estadoActual = lectura;
+
+      // Detecta SOLO cuando se presiona (flanco descendente)
+      if (estadoActual == LOW) {
+        conteoPulsos++;
+        tiempoUltimaPulsacion = ahora;
+        esperandoSecuencia = true;
+      }
+    }
+  }
+
+  estadoAnterior = lectura;
+
+  // --- Procesar la secuencia cuando pasa el tiempo ---
+  if (esperandoSecuencia && (ahora - tiempoUltimaPulsacion > ventanaSecuencia)) {
+    if (conteoPulsos == 1) {
+      Serial.println("➡️ Pulsación simple detectada");
+    } else if (conteoPulsos == 2) {
+      Serial.println("➡️ Doble pulsación detectada");
+    } else if (conteoPulsos >= 3) {
+      Serial.println("➡️ Triple pulsación detectada (máximo)");
+    }
+    conteoPulsos = 0;
+    esperandoSecuencia = false;
+  }
+
+  // --- Lectura de sensores ---
+  valorLuz = leerPromedio(pinLDR);
+  valorPote = leerPromedio(pinPote);
+
+  // --- Mostrar valores ---
+  Serial.print("LDR: ");
+  Serial.print(valorLuz);
+  Serial.print(" | Potenciómetro: ");
+  Serial.print(valorPote);
+  Serial.print(" | Pulsos contados: ");
+  Serial.println(conteoPulsos);
+
+  delay(20);
+}
