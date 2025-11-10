@@ -1,0 +1,152 @@
+#include <esp_now.h>
+#include <WiFi.h>
+#include "esp_wifi.h"
+
+// --- Dirección broadcast ---
+uint8_t broadcastAddress[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+
+// --- Pines ---
+const int pinPulsador = 2;
+const int pinLDR      = 0;
+const int pinPote     = 1;
+
+// --- Variables pulsador ---
+bool estadoActual = HIGH;
+bool estadoAnterior = HIGH;
+unsigned long tiempoUltimoCambio = 0;
+unsigned long tiempoUltimaPulsacion = 0;
+int conteoPulsos = 0;
+bool esperandoSecuencia = false;
+
+// --- Configuración de tiempos ---
+const unsigned long debounceDelay = 30;       // rebote
+const unsigned long ventanaSecuencia = 600;   // ms para agrupar pulsos
+
+// --- Sensores ---
+int valorLuz = 0;
+int valorPote = 0;
+int tipoPulsacion = 0;
+
+// --- Control de envío ---
+unsigned long ultimoEnvio = 0;
+const unsigned long intervaloSensores = 1000; // enviar si cambian o cada 1 s
+int valorLuzPrev = -1;
+int valorPotePrev = -1;
+
+// --- Estructura de datos ---
+typedef struct struct_mensaje {
+  uint16_t valorLDR;       // 0..4095
+  uint16_t valorPote;      // 0..4095
+  uint8_t tipoPulsacion;   // 0 = ninguna, 1 = simple, 2 = doble, 3 = triple
+} struct_mensaje;
+
+struct_mensaje miDato;
+
+// --- Función promedio ---
+int leerPromedio(int pin) {
+  long suma = 0;
+  for (int i = 0; i < 5; i++) {
+    suma += analogRead(pin);
+    delayMicroseconds(500);
+  }
+  return suma / 5;
+}
+
+// --- Callback de envío ---
+void onDataSent(const wifi_tx_info_t *info, esp_now_send_status_t status) {
+  Serial.print("📡 Último envío: ");
+  Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Éxito" : "Fallo");
+}
+
+// --- Enviar datos ---
+void enviarDatos() {
+  miDato.valorLDR = valorLuz;
+  miDato.valorPote = valorPote;
+  miDato.tipoPulsacion = tipoPulsacion;
+
+  Serial.print("📤 Enviando -> LDR: "); Serial.print(valorLuz);
+  Serial.print(" | Pote: "); Serial.print(valorPote);
+  Serial.print(" | Pulsación: "); Serial.println(tipoPulsacion);
+
+  esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *)&miDato, sizeof(miDato));
+  if (result != ESP_OK) Serial.println("⚠️ Error al enviar");
+
+  tipoPulsacion = 0;
+}
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(pinPulsador, INPUT_PULLUP);
+
+  WiFi.disconnect(true);
+  delay(100);
+  WiFi.mode(WIFI_STA);
+  esp_wifi_set_channel(1, WIFI_SECOND_CHAN_NONE);
+
+  if (esp_now_init() != ESP_OK) {
+    Serial.println("❌ Error al inicializar ESP-NOW");
+    return;
+  }
+
+  esp_now_register_send_cb(onDataSent);
+
+  esp_now_peer_info_t peerInfo = {};
+  memcpy(peerInfo.peer_addr, broadcastAddress, 6);
+  peerInfo.channel = 1;
+  peerInfo.encrypt = false;
+  esp_now_add_peer(&peerInfo);
+
+  Serial.println("✅ Transmisor listo.");
+}
+
+void loop() {
+  unsigned long ahora = millis();
+  bool lectura = digitalRead(pinPulsador);
+
+  // --- Antirrebote ---
+  if (lectura != estadoAnterior) tiempoUltimoCambio = ahora;
+
+  if ((ahora - tiempoUltimoCambio) > debounceDelay) {
+    if (lectura != estadoActual) {
+      estadoActual = lectura;
+      if (estadoActual == LOW) {
+        conteoPulsos++;
+        tiempoUltimaPulsacion = ahora;
+        esperandoSecuencia = true;
+      }
+    }
+  }
+  estadoAnterior = lectura;
+
+  // --- Procesar pulsaciones ---
+  if (esperandoSecuencia && (ahora - tiempoUltimaPulsacion > ventanaSecuencia)) {
+    if      (conteoPulsos == 1) tipoPulsacion = 1;
+    else if (conteoPulsos == 2) tipoPulsacion = 2;
+    else if (conteoPulsos >= 3) tipoPulsacion = 3;
+    else tipoPulsacion = 0;
+
+    conteoPulsos = 0;
+    esperandoSecuencia = false;
+
+    // Enviar de inmediato
+    valorLuz = leerPromedio(pinLDR);
+    valorPote = leerPromedio(pinPote);
+    enviarDatos();
+    valorLuzPrev = valorLuz;
+    valorPotePrev = valorPote;
+    ultimoEnvio = ahora;
+  }
+
+  // --- Lectura periódica ---
+  if (ahora - ultimoEnvio > intervaloSensores) {
+    valorLuz = leerPromedio(pinLDR);
+    valorPote = leerPromedio(pinPote);
+
+    if (abs(valorLuz - valorLuzPrev) > 25 || abs(valorPote - valorPotePrev) > 15) {
+      enviarDatos();
+      valorLuzPrev = valorLuz;
+      valorPotePrev = valorPote;
+    }
+    ultimoEnvio = ahora;
+  }
+}
