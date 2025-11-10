@@ -1,0 +1,53 @@
+#include <esp_now.h>
+#include <WiFi.h>
+#include "esp_wifi.h"
+
+// Callback cuando llega un mensaje
+typedef struct struct_mensaje {
+  uint16_t valorLDR;
+  uint16_t valorPote;
+  uint8_t tipoPulsacion;
+} struct_mensaje;
+
+struct_mensaje datosRecibidos;
+
+void onDataRecv(const esp_now_recv_info_t *info, const uint8_t *data, int len) {
+  memcpy(&datosRecibidos, data, sizeof(datosRecibidos));
+
+  Serial.println("📥 --- Datos recibidos ---");
+  Serial.print("LDR: "); Serial.println(datosRecibidos.valorLDR);
+  Serial.print("Potenciómetro: "); Serial.println(datosRecibidos.valorPote);
+  Serial.print("Pulsación: ");
+  switch(datosRecibidos.tipoPulsacion) {
+    case 1: Serial.println("Simple"); break;
+    case 2: Serial.println("Doble"); break;
+    case 3: Serial.println("Triple"); break;
+    default: Serial.println("Ninguna"); break;
+  }
+  Serial.println("---------------------------");
+}
+
+void setup() {
+  Serial.begin(115200);
+
+  // Asegurar que ambos usen el mismo canal WiFi
+  WiFi.disconnect(true);   // Borra credenciales guardadas
+  delay(100);
+  WiFi.mode(WIFI_STA);
+  esp_wifi_set_channel(1, WIFI_SECOND_CHAN_NONE);
+
+  // Inicializar ESP-NOW
+  if (esp_now_init() != ESP_OK) {
+    Serial.println("❌ Error al inicializar ESP-NOW");
+    return;
+  }
+
+  // Registrar callback de recepción
+  esp_now_register_recv_cb(onDataRecv);
+
+  Serial.println("✅ Receptor ESP-NOW listo para recibir datos.");
+}
+
+void loop() {
+  // No es necesario código aquí
+}
