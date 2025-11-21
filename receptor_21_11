@@ -1,0 +1,205 @@
+#include <esp_now.h>
+#include <WiFi.h>
+#include "esp_wifi.h"
+
+// -------------------------
+// ESTRUCTURA ESP-NOW
+// -------------------------
+typedef struct struct_mensaje {
+  uint16_t valorLDR;
+  uint16_t valorPote;
+  uint8_t tipoPulsacion;
+} struct_mensaje;
+
+struct_mensaje datosRecibidos;
+
+
+// -------------------------
+// PINES TB6612FNG
+// -------------------------
+// Motor A
+#define AIN1 14
+#define AIN2 27
+#define PWMA 26   // PWM
+
+// Motor B
+#define BIN1 25
+#define BIN2 33
+#define PWMB 32   // PWM
+
+#define STBY 13   // Standby del puente H
+
+// -------------------------
+// PARÁMETROS DE CONTROL
+// -------------------------
+int margen = 100;            // Rango en el que no se mueve
+int velocidad = 120;         // Velocidad lenta (0-255) para evitar pasarse
+
+
+// -------------------------
+// FUNCIÓN PARA CONTROLAR MOTORES
+// -------------------------
+void moverMotores(int direccion) {
+  // direccion = -1  mover hacia un lado
+  // direccion = +1  mover hacia el otro
+  // direccion = 0   parar
+
+  digitalWrite(STBY, HIGH);  // Activar puente H
+
+  if (direccion == 0) {
+    // APAGAR motores
+    digitalWrite(AIN1, LOW);
+    digitalWrite(AIN2, LOW);
+    analogWrite(PWMA, 0);
+
+    digitalWrite(BIN1, LOW);
+    digitalWrite(BIN2, LOW);
+    analogWrite(PWMB, 0);
+    return;
+  }
+
+  if (direccion > 0) {
+    // MOVER HACIA ADELANTE
+    digitalWrite(AIN1, HIGH);
+    digitalWrite(AIN2, LOW);
+    analogWrite(PWMA, velocidad);
+
+    digitalWrite(BIN1, HIGH);
+    digitalWrite(BIN2, LOW);
+    analogWrite(PWMB, velocidad);
+  } 
+  else {
+    // MOVER HACIA ATRÁS
+    digitalWrite(AIN1, LOW);
+    digitalWrite(AIN2, HIGH);
+    analogWrite(PWMA, velocidad);
+
+    digitalWrite(BIN1, LOW);
+    digitalWrite(BIN2, HIGH);
+    analogWrite(PWMB, velocidad);
+  }
+}
+void moverMotores(int direccion) {
+  // direccion = -1  mover hacia un lado
+  // direccion = +1  mover hacia el otro
+  // direccion = 0   parar
+
+  digitalWrite(STBY, HIGH);  // Activar puente H
+
+  if (direccion == 0) {
+    // APAGAR motores
+    digitalWrite(AIN1, LOW);
+    digitalWrite(AIN2, LOW);
+    analogWrite(PWMA, 0);
+
+    digitalWrite(BIN1, LOW);
+    digitalWrite(BIN2, LOW);
+    analogWrite(PWMB, 0);
+    return;
+  }
+
+  if (direccion > 0) {
+    // ➤ MOTOR A ADELANTE
+    digitalWrite(AIN1, HIGH);
+    digitalWrite(AIN2, LOW);
+    analogWrite(PWMA, velocidad);
+
+    // ➤ MOTOR B ATRÁS (inverso)
+    digitalWrite(BIN1, LOW);
+    digitalWrite(BIN2, HIGH);
+    analogWrite(PWMB, velocidad);
+  } 
+  else {
+    // ➤ MOTOR A ATRÁS
+    digitalWrite(AIN1, LOW);
+    digitalWrite(AIN2, HIGH);
+    analogWrite(PWMA, velocidad);
+
+    // ➤ MOTOR B ADELANTE (inverso)
+    digitalWrite(BIN1, HIGH);
+    digitalWrite(BIN2, LOW);
+    analogWrite(PWMB, velocidad);
+  }
+}
+
+
+// -------------------------
+// CALLBACK ESP-NOW
+// -------------------------
+void onDataRecv(const esp_now_recv_info_t *info, const uint8_t *data, int len) {
+  memcpy(&datosRecibidos, data, sizeof(datosRecibidos));
+
+  Serial.println("📥 --- Datos recibidos ---");
+  Serial.print("LDR: "); Serial.println(datosRecibidos.valorLDR);
+  Serial.print("Potenciómetro (luz deseada): "); Serial.println(datosRecibidos.valorPote);
+  Serial.print("Pulsación: ");
+  switch(datosRecibidos.tipoPulsacion) {
+    case 1: Serial.println("Simple"); break;
+    case 2: Serial.println("Doble"); break;
+    case 3: Serial.println("Triple"); break;
+    default: Serial.println("Ninguna"); break;
+  }
+  Serial.println("---------------------------");
+
+
+  // --- CONTROL DE MOTORES ----
+  int luzActual = datosRecibidos.valorLDR;
+  int luzDeseada = datosRecibidos.valorPote;
+
+  if (luzActual < luzDeseada - margen) {
+    Serial.println("➡ Luz menor a la deseada → Mover hacia dirección 1");
+    moverMotores(+1);
+  }
+  else if (luzActual > luzDeseada + margen) {
+    Serial.println("⬅ Luz mayor a la deseada → Mover hacia dirección -1");
+    moverMotores(-1);
+  }
+  else {
+    Serial.println("✔ Luz dentro del margen → Motores detenidos");
+    moverMotores(0);
+  }
+}
+
+
+// -------------------------
+// SETUP
+// -------------------------
+void setup() {
+  Serial.begin(115200);
+
+  // Pines del motor
+  pinMode(AIN1, OUTPUT);
+  pinMode(AIN2, OUTPUT);
+  pinMode(PWMA, OUTPUT);
+  pinMode(BIN1, OUTPUT);
+  pinMode(BIN2, OUTPUT);
+  pinMode(PWMB, OUTPUT);
+  pinMode(STBY, OUTPUT);
+
+  moverMotores(0);   // Motores apagados al inicio
+
+
+  // -------------------------
+  // Configurar ESP-NOW
+  // -------------------------
+  WiFi.disconnect(true);
+  delay(100);
+  WiFi.mode(WIFI_STA);
+  esp_wifi_set_channel(1, WIFI_SECOND_CHAN_NONE);
+
+  if (esp_now_init() != ESP_OK) {
+    Serial.println("❌ Error al inicializar ESP-NOW");
+    return;
+  }
+
+  esp_now_register_recv_cb(onDataRecv);
+
+  Serial.println("✅ Receptor ESP-NOW listo y motores configurados.");
+}
+
+
+// -------------------------
+// LOOP (no se usa)
+// -------------------------
+void loop() {
+}
